@@ -259,6 +259,8 @@ func (s *service) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest
 		if resp != nil {
 			volumeResp := utils.GetVolumeResponseFromVolume(resp, arrayID, protocol, preferredAccessibility)
 			log.Debugf("CreateVolume successful for volid: [%s]", volumeResp.Volume.VolumeId)
+			log.Debugf("---------------------------")
+			s.getMetricsCollection(ctx, arrayID, 1)
 			return volumeResp, nil
 		}
 	}
