@@ -1,0 +1,15 @@
+/root/csi-unity/dell-csi-helm-installer/../helm/csi-unity/Chart.yaml
+unity
+---------------
+csi-uninstall.sh:71 - Running command: helm list --namespace unity
+Results:
+NAME 	NAMESPACE	REVISION	UPDATED                                	STATUS  	CHART          	APP VERSION
+unity	unity    	1       	2022-05-02 04:54:42.543268878 -0400 EDT	deployed	csi-unity-2.3.0	2.3.0      
+---------------
+---------------
+csi-uninstall.sh:131 - Running command: helm delete -n unity unity
+Results:
+release "unity" uninstalled
+---------------
+Removal of the CSI Driver is in progress.
+It may take a few minutes for all pods to terminate.

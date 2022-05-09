@@ -1,0 +1,61 @@
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: pvc-nfs
+  namespace: nginx
+spec:
+  accessModes:
+  - ReadWriteOnce
+  volumeMode: Filesystem
+  resources:
+    requests:
+      storage: 3Gi
+  storageClassName: unity-nfs
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test-pod-nfs
+  namespace: nginx
+spec:
+  containers:
+    - name: ngnix-test-nfs
+      image: nginx
+      volumeMounts:
+        - mountPath: /usr/share/nginx/html/device
+          name: ngnix-test-vol
+  volumes:
+    - name: ngnix-test-vol
+      persistentVolumeClaim:
+        claimName: pvc-nfs
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pvc-iscsi
+  namespace: nginx
+spec:
+  storageClassName: unity-iscsi
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 3Gi
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test-pod-iscsi
+  namespace: nginx
+spec:
+  containers:
+    - name: ngnix-test-iscsi
+      image: nginx
+      ports:
+        - containerPort: 80
+          name: "http-server"
+  volumes:
+    - name: ngnix-test-iscsi
+      persistentVolumeClaim:
+        claimName: pvc-iscsi
+

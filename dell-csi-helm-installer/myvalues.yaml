@@ -1,0 +1,25 @@
+version: "20220425021926"
+tenantName: ""
+logLevel: "debug"
+node:
+  healthMonitor:
+    enabled: true
+  tolerations:
+    - key: "node-for"
+      operator: "Exists"
+      effect: "NoSchedule"
+controller:
+  healthMonitor:
+    enabled: true
+  controllerCount: 2
+  tolerations:
+    - key: "node-for"
+      operator: "Equal"
+      value: "unity"
+      effect: "NoSchedule"
+  volumeNamePrefix: csi-unity-rh8
+  snapshot:
+    snapNamePrefix: csi-snap-rh8
+allowRWOMultiPodAccess: "true"
+images:
+ driverRepository: amaas-eos-mw1.cec.lab.emc.com:5028/csi-unity

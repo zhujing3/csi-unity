@@ -60,7 +60,6 @@ var DriverConfig string
 
 // DriverSecret - Driver secret
 var DriverSecret string
-
 //To maintain runid for Non debug mode. Note: CSI will not generate runid if CSI_DEBUG=false
 var runid int64
 
@@ -463,8 +462,14 @@ func (s *service) syncDriverSecret(ctx context.Context) error {
 		s.arrays.Delete(key)
 		return true
 	})
-	secretBytes, err := ioutil.ReadFile(filepath.Clean(DriverSecret))
+        log.Info("######################")
+        log.Info(DriverSecret)
+        log.Info("##############################")
+        //DriverSecret = "/root/csi-unity/secret.yaml"
+	secretBytes, err := ioutil.ReadFile(DriverSecret)
 	if err != nil {
+                log.Info("*************kar**************")
+                log.Debugf("kar  %s as yaml", DriverSecret)
 		return fmt.Errorf("File ('%s') error: %v", DriverSecret, err)
 	}
 
