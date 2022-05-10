@@ -275,6 +275,7 @@ func (s *service) BeforeServe(
 		go s.syncNodeInfoRoutine(ctx)
 		syncNodeInfoChan <- true
 	}
+        log.Info("llllllllllllllllllllllllllll")
 
 	return nil
 }
@@ -284,6 +285,7 @@ func (s *service) RegisterAdditionalServers(server *grpc.Server) {
 	_, log := setRunIDContext(context.Background(), "RegisterAdditionalServers")
 	log.Info("Registering additional GRPC servers")
 	podmon.RegisterPodmonServer(server, s)
+        log.Info("outside of registering additional servers")
 }
 
 //Get storage array from sync Map
@@ -563,10 +565,12 @@ func (s *service) syncDriverSecret(ctx context.Context) error {
 func (s *service) syncDriverConfig(ctx context.Context, v *viper.Viper) {
 	ctx, log, _ := GetRunidLog(ctx)
 	log.Info("*************Synchronizing driver config**************")
-
+        log.Info(constants.ParamCSILogLevel)
+        log.Warnf("karthik: %s", constants.ParamCSILogLevel)
+        log.Info("gggggggg")
 	if v.IsSet(constants.ParamCSILogLevel) {
 		inputLogLevel := v.GetString(constants.ParamCSILogLevel)
-
+                log.Info("###################params log level ############")
 		if inputLogLevel == "" {
 			//setting default log level to Info if input is invalid
 			s.opts.LogLevel = "Info"

@@ -16,6 +16,12 @@ export X_CSI_REP_LOGGING="true"
 export GOUNITY_DEBUG="true"
 export X_CSI_UNITY_AUTOPROBE="true"
 export DRIVER_NAME="csi-unity.dellemc.com"
-export DRIVER_CONFIG=/root/csi-unity/helm/csi-unity/values.yaml
+export DRIVER_CONFIG=/root/csi-unity/values.yaml
 export DRIVER_SECRET=/root/csi-unity/secret.yaml
 export X_CSI_UNITY_ARRAYID="APM00202802812"
+export CSI_LOG_LEVEL="info"
+export ALLOW_RWO_MULTIPOD_ACCESS="true"
+export MAX_UNITY_VOLUMES_PER_NODE=0
+export SYNC_NODE_INFO_TIME_INTERVAL=15
+export TENANT_NAME=""
+
