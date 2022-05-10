@@ -33,7 +33,7 @@ type StorageArrayConfig struct {
 func TestMain(m *testing.M) {
 	os.Setenv("X_CSI_MODE", "")
 
-	file, err := ioutil.ReadFile(os.Getenv("DRIVER_CONFIG"))
+	file, err := ioutil.ReadFile(os.Getenv("DRIVER_SECRET"))
 	if err != nil {
 		panic("Driver Config missing")
 	}
@@ -88,7 +88,7 @@ func startServer(ctx context.Context) (*grpc.ClientConn, func()) {
 		return nil, nil
 	}
 	service.Name = os.Getenv("DRIVER_NAME")
-	service.DriverConfig = os.Getenv("DRIVER_CONFIG")
+	service.DriverSecret = os.Getenv("DRIVER_SECRET")
 	fmt.Printf("lis: %v\n", lis)
 	go func() {
 		fmt.Printf("starting server\n")
