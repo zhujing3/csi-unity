@@ -558,8 +558,10 @@ func (s *service) syncDriverSecret(ctx context.Context) error {
 func (s *service) syncDriverConfig(ctx context.Context, v *viper.Viper) {
 	ctx, log, _ := GetRunidLog(ctx)
 	log.Info("*************Synchronizing driver config**************")
+	
 	if v.IsSet(constants.ParamCSILogLevel) {
 		inputLogLevel := v.GetString(constants.ParamCSILogLevel)
+		
 		if inputLogLevel == "" {
 			//setting default log level to Info if input is invalid
 			s.opts.LogLevel = "Info"
