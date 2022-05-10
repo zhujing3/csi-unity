@@ -91,7 +91,7 @@ func startServer(ctx context.Context) (*grpc.ClientConn, func()) {
 		return nil, nil
 	}
 	service.Name = os.Getenv("DRIVER_NAME")
-        service.DriverConfig = os.Getenv("DRIVER_CONFIG")
+        //service.DriverConfig = os.Getenv("DRIVER_CONFIG")
 	service.DriverSecret = os.Getenv("DRIVER_SECRET")
         
 	fmt.Printf("lis: %v\n", lis)
