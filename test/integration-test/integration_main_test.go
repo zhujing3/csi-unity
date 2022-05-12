@@ -50,7 +50,7 @@ func TestMain(m *testing.M) {
 	fmt.Printf("calling startServer")
 	grpcClient, stop = startServer(ctx)
 	fmt.Printf("back from startServer")
-	time.Sleep(40 * time.Second)
+	time.Sleep(5 * time.Second)
 
 	exitVal := godog.RunWithOptions("godog", func(s *godog.Suite) {
 		FeatureContext(s)
