@@ -79,7 +79,7 @@ func (f *feature) aCSIService() error {
 }
 
 //aBasicBlockVolumeRequest method to buils a Create volume request
-func (f *feature) aBasicBlockVolumeRequest(volumeName, arrayId, protocol string, size int) error {
+func (f *feature) aBasicBlockVolumeRequest(volumeName, protocol string, size int) error {
 	f.createVolumeRequest = nil
 	req := new(csi.CreateVolumeRequest)
 	params := make(map[string]string)
@@ -88,7 +88,7 @@ func (f *feature) aBasicBlockVolumeRequest(volumeName, arrayId, protocol string,
 	params["isDataReductionEnabled"] = "false"
 	params["tieringPolicy"] = "0"
 	params["description"] = "CSI Volume Unit Test"
-	params["arrayId"] = os.Getenv(arrayId)
+	params["arrayId"] = os.Getenv("arrayId")
 	params["protocol"] = protocol
 	params["nasServer"] = os.Getenv("NAS_SERVER")
 	req.Parameters = params
@@ -113,12 +113,12 @@ func (f *feature) aBasicBlockVolumeRequest(volumeName, arrayId, protocol string,
 }
 
 //aBasicBlockVolumeRequest method with volume content source
-func (f *feature) aBasicBlockVolumeRequestWithVolumeContentSource(volumeName, arrayId, protocol string, size int) error {
+func (f *feature) aBasicBlockVolumeRequestWithVolumeContentSource(volumeName, protocol string, size int) error {
 	f.createVolumeRequest = nil
 	req := new(csi.CreateVolumeRequest)
 	params := make(map[string]string)
 	params["storagePool"] = os.Getenv("STORAGE_POOL")
-	params["arrayId"] = os.Getenv(arrayId)
+	params["arrayId"] = os.Getenv("arrayId")
 	params["protocol"] = protocol
 	req.Parameters = params
 	req.Name = volumeName
@@ -700,8 +700,8 @@ func (f *feature) whenICallNodeGetCapabilities() error {
 func FeatureContext(s *godog.Suite) {
 	f := &feature{}
 	s.Step(`^a CSI service$`, f.aCSIService)
-	s.Step(`^a basic block volume request name "([^"]*)" arrayId "([^"]*)" protocol "([^"]*)" size "(\d+)"$`, f.aBasicBlockVolumeRequest)
-	s.Step(`^a basic block volume request with volume content source with name "([^"]*)" arrayId "([^"]*)" protocol "([^"]*)" size "([^"]*)"$`, f.aBasicBlockVolumeRequestWithVolumeContentSource)
+	s.Step(`^a basic block volume request name "([^"]*)" protocol "([^"]*)" size "(\d+)"$`, f.aBasicBlockVolumeRequest)
+	s.Step(`^a basic block volume request with volume content source with name "([^"]*)" protocol "([^"]*)" size "([^"]*)"$`, f.aBasicBlockVolumeRequestWithVolumeContentSource)
 	s.Step(`^I call CreateVolume$`, f.iCallCreateVolume)
 	s.Step(`^when I call DeleteVolume$`, f.whenICallDeleteVolume)
 	s.Step(`^When I call DeleteAllCreatedVolumes$`, f.whenICallDeleteAllCreatedVolumes)
