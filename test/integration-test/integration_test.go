@@ -672,29 +672,6 @@ func (f *feature) iCallControllerExpandVolume(new_size int) error {
 	return nil
 }
 
-//iCallControllerExpandVolume - Test case for controller expand volume with volume id as parameter
-func (f *feature) iCallControllerExpandVolumeWithVolume(new_size int, volID string) error {
-	f.controllerExpandVolumeRequest = nil
-	req := new(csi.ControllerExpandVolumeRequest)
-	req.VolumeId = volID
-	capRange := new(csi.CapacityRange)
-	capRange.RequiredBytes = int64(new_size * 1024 * 1024 * 1024)
-	capRange.LimitBytes = int64(new_size * 1024 * 1024 * 1024)
-	req.CapacityRange = capRange
-	f.controllerExpandVolumeRequest = req
-
-	ctx := context.Background()
-	client := csi.NewControllerClient(grpcClient)
-	_, err := client.ControllerExpandVolume(ctx, req)
-	if err != nil {
-		fmt.Printf("Controller expand volume failed: %s\n", err.Error())
-		f.addError(err)
-	} else {
-		fmt.Printf("Controller expand volume completed successfully\n")
-	}
-	return nil
-}
-
 //whenICallNodePublishVolume - Test case for node publish volume
 func (f *feature) whenICallNodePublishVolume(fsType, readonly string) error {
 	f.nodePublishVolumeRequest = nil
@@ -919,24 +896,6 @@ func (f *feature) iCallUnpublishVolumeWithVolumeId(volId string) error {
 	return nil
 }
 
-//iCallControllerGetCapabilities - Test case for controller get capabilities
-func (f *feature) iCallControllerGetCapabilities() error {
-	f.controllerGetCapabilitiesRequest = nil
-	req := new(csi.ControllerGetCapabilitiesRequest)
-	f.controllerGetCapabilitiesRequest = req
-
-	ctx := context.Background()
-	client := csi.NewControllerClient(grpcClient)
-	_, err := client.ControllerGetCapabilities(ctx, req)
-	if err != nil {
-		fmt.Printf("Controller get capabilities failed: %s\n", err.Error())
-		f.addError(err)
-	} else {
-		fmt.Printf("Controller get capabilities completed successfully\n")
-	}
-	return nil
-}
-
 //iCallControllerExpandVolume - Test case for controller expand volume
 func (f *feature) iCallControllerExpandVolume(new_size int) error {
 	f.controllerExpandVolumeRequest = nil
@@ -998,47 +957,6 @@ func (f *feature) iCallControllerGetVolumeWithVolume(volID string) error {
 		f.addError(err)
 	} else {
 		fmt.Printf("Controller get volume completed successfully\n")
-	}
-	return nil
-}
-
-//whenICallNodePublishVolume - Test case for node publish volume
-func (f *feature) whenICallNodePublishVolume(fsType, readonly string) error {
-	f.nodePublishVolumeRequest = nil
-	req := new(csi.NodePublishVolumeRequest)
-	if f.createVolumeResponse != nil {
-		req.VolumeId = f.volID
-	} else {
-		req.VolumeId = ""
-	}
-	req.StagingTargetPath = path.Join(os.Getenv("X_CSI_STAGING_TARGET_PATH"), f.volID)
-	req.TargetPath = path.Join(os.Getenv("X_CSI_PUBLISH_TARGET_PATH"), f.volID)
-	capability := new(csi.VolumeCapability)
-	mount := new(csi.VolumeCapability_MountVolume)
-	mount.FsType = fsType
-	mountType := new(csi.VolumeCapability_Mount)
-	mountType.Mount = mount
-	capability.AccessType = mountType
-	accessMode := new(csi.VolumeCapability_AccessMode)
-	accessMode.Mode = f.capability.AccessMode.Mode
-	capability.AccessMode = accessMode
-	if fsType == "" {
-		req.VolumeCapability = f.capability
-	} else {
-		req.VolumeCapability = capability
-	}
-	read, _ := strconv.ParseBool(readonly)
-	req.Readonly = read
-	f.nodePublishVolumeRequest = req
-
-	ctx := context.Background()
-	client := csi.NewNodeClient(grpcClient)
-	_, err := client.NodePublishVolume(ctx, req)
-	if err != nil {
-		fmt.Printf("Node publish volume failed: %s\n", err.Error())
-		f.addError(err)
-	} else {
-		fmt.Printf("Node publish volume completed successfully\n")
 	}
 	return nil
 }
@@ -1170,34 +1088,6 @@ func (f *feature) whenICallNodePublishVolumeWithoutAccessmode(fsType string) err
 	return nil
 }
 
-//whenICallNodeUnPublishVolume - Test case for node unpublish volume
-func (f *feature) whenICallNodeUnPublishVolume() error {
-	f.nodeUnpublishVolumeRequest = nil
-	req := new(csi.NodeUnpublishVolumeRequest)
-	if f.nodePublishVolumeRequest != nil {
-		req.VolumeId = f.nodePublishVolumeRequest.VolumeId
-	} else {
-		req.VolumeId = ""
-	}
-	if f.nodePublishVolumeRequest != nil {
-		req.TargetPath = f.nodePublishVolumeRequest.TargetPath
-	} else {
-		req.TargetPath = ""
-	}
-	f.nodeUnpublishVolumeRequest = req
-
-	ctx := context.Background()
-	client := csi.NewNodeClient(grpcClient)
-	_, err := client.NodeUnpublishVolume(ctx, req)
-	if err != nil {
-		fmt.Printf("Node unpublish volume failed: %s\n", err.Error())
-		f.addError(err)
-	} else {
-		fmt.Printf("Node unpublish volume completed successfully\n")
-	}
-	return nil
-}
-
 //whenICallNodeUnPublishVolumeWithTargetPath - Test case for node unpublish volume with target path
 func (f *feature) whenICallNodeUnPublishVolumeWithTargetPath(target_path string) error {
 	f.nodeUnpublishVolumeRequest = nil
@@ -1219,43 +1109,6 @@ func (f *feature) whenICallNodeUnPublishVolumeWithTargetPath(target_path string)
 		f.addError(err)
 	} else {
 		fmt.Printf("Node unpublish volume completed successfully\n")
-	}
-	return nil
-}
-
-//whenICallNodeStageVolume - Test case for node stage volume
-func (f *feature) whenICallNodeStageVolume(fsType string) error {
-	f.nodeStageVolumeRequest = nil
-	req := new(csi.NodeStageVolumeRequest)
-	req.VolumeId = f.volID
-	if f.createVolumeResponse == nil {
-		req.VolumeId = "NoID"
-	}
-	req.StagingTargetPath = path.Join(os.Getenv("X_CSI_STAGING_TARGET_PATH"), f.volID)
-	capability := new(csi.VolumeCapability)
-	mount := new(csi.VolumeCapability_MountVolume)
-	mount.FsType = fsType
-	mountType := new(csi.VolumeCapability_Mount)
-	mountType.Mount = mount
-	capability.AccessType = mountType
-	accessMode := new(csi.VolumeCapability_AccessMode)
-	accessMode.Mode = f.capability.AccessMode.Mode
-	capability.AccessMode = accessMode
-	if fsType == "" {
-		req.VolumeCapability = f.capability
-	} else {
-		req.VolumeCapability = capability
-	}
-	f.nodeStageVolumeRequest = req
-
-	ctx := context.Background()
-	client := csi.NewNodeClient(grpcClient)
-	_, err := client.NodeStageVolume(ctx, req)
-	if err != nil {
-		fmt.Printf("Node stage volume failed: %s\n", err.Error())
-		f.addError(err)
-	} else {
-		fmt.Printf("Node stage volume completed successfully\n")
 	}
 	return nil
 }
@@ -1289,66 +1142,6 @@ func (f *feature) whenICallNodeStageVolumeWithTargetPath(fsType, target_path str
 		f.addError(err)
 	} else {
 		fmt.Printf("Node stage volume completed successfully\n")
-	}
-	return nil
-}
-
-//whenICallNodeUnstageVolume - Test case for node unstage volume
-func (f *feature) whenICallNodeUnstageVolume() error {
-	f.nodeUnstageVolumeRequest = nil
-	req := new(csi.NodeUnstageVolumeRequest)
-	if f.createVolumeResponse == nil {
-		req.VolumeId = "NoID"
-	} else {
-		req.VolumeId = f.volID
-	}
-	if f.nodeStageVolumeRequest == nil {
-		req.StagingTargetPath = ""
-	} else {
-		req.StagingTargetPath = f.nodeStageVolumeRequest.StagingTargetPath
-	}
-	f.nodeUnstageVolumeRequest = req
-
-	ctx := context.Background()
-	client := csi.NewNodeClient(grpcClient)
-	_, err := client.NodeUnstageVolume(ctx, req)
-	if err != nil {
-		fmt.Printf("Node unstage volume failed: %s\n", err.Error())
-		f.addError(err)
-	} else {
-		fmt.Printf("Node unstage volume completed successfully\n")
-	}
-	return nil
-}
-
-//whenICallNodeGetInfo - Test case for node get info
-func (f *feature) whenICallNodeGetInfo() error {
-	req := new(csi.NodeGetInfoRequest)
-
-	ctx := context.Background()
-	client := csi.NewNodeClient(grpcClient)
-	_, err := client.NodeGetInfo(ctx, req)
-	if err != nil {
-		fmt.Printf("Node get info failed: %s\n", err.Error())
-		f.addError(err)
-	} else {
-		fmt.Printf("Node get info completed successfully\n")
-	}
-	return nil
-}
-
-//whenICallNodeGetCapabilities - Test case for node get capabilities
-func (f *feature) whenICallNodeGetCapabilities() error {
-	req := new(csi.NodeGetCapabilitiesRequest)
-
-	ctx := context.Background()
-	client := csi.NewNodeClient(grpcClient)
-	_, err := client.NodeGetCapabilities(ctx, req)
-	if err != nil {
-		fmt.Printf("Node get capabilities failed: %s\n", err.Error())
-		f.addError(err)
-	} else {
-		fmt.Printf("Node get capabilities completed successfully\n")
 	}
 	return nil
 }
