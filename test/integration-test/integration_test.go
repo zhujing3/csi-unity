@@ -35,6 +35,7 @@ type feature struct {
 	validateVolumeCapabilitiesRequest *csi.ValidateVolumeCapabilitiesRequest
 	controllerGetCapabilitiesRequest  *csi.ControllerGetCapabilitiesRequest
 	controllerExpandVolumeRequest     *csi.ControllerExpandVolumeRequest
+	controllerGetVolumeRequest        *csi.ControllerGetVolumeRequest
 	nodePublishVolumeRequest          *csi.NodePublishVolumeRequest
 	nodeUnpublishVolumeRequest        *csi.NodeUnpublishVolumeRequest
 	nodeStageVolumeRequest            *csi.NodeStageVolumeRequest
@@ -43,6 +44,8 @@ type feature struct {
 	volIDList                         []string
 	maxRetryCount                     int
 	volumeContext                     map[string]string
+	nodeId                            string
+	ephemeral                         bool
 }
 
 //addError method appends an error to the error list
