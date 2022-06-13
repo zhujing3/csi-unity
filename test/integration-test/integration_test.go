@@ -900,29 +900,6 @@ func (f *feature) iCallUnpublishVolumeWithVolumeId(volId string) error {
 	return nil
 }
 
-//iCallControllerExpandVolume - Test case for controller expand volume
-func (f *feature) iCallControllerExpandVolume(new_size int) error {
-	f.controllerExpandVolumeRequest = nil
-	req := new(csi.ControllerExpandVolumeRequest)
-	req.VolumeId = f.volID
-	capRange := new(csi.CapacityRange)
-	capRange.RequiredBytes = int64(new_size * 1024 * 1024 * 1024)
-	capRange.LimitBytes = int64(new_size * 1024 * 1024 * 1024)
-	req.CapacityRange = capRange
-	f.controllerExpandVolumeRequest = req
-
-	ctx := context.Background()
-	client := csi.NewControllerClient(grpcClient)
-	_, err := client.ControllerExpandVolume(ctx, req)
-	if err != nil {
-		fmt.Printf("Controller expand volume failed: %s\n", err.Error())
-		f.addError(err)
-	} else {
-		fmt.Printf("Controller expand volume completed successfully\n")
-	}
-	return nil
-}
-
 //iCallControllerExpandVolume - Test case for controller expand volume with volume id as parameter
 func (f *feature) iCallControllerExpandVolumeWithVolume(new_size int, volID string) error {
 	f.controllerExpandVolumeRequest = nil
