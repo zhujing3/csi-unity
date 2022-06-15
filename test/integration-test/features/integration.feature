@@ -524,18 +524,6 @@ Feature: CSI interface
     When I call UnpublishVolume with volumeId ""
     Then the error message should contain "required: VolumeID"
 
-  Scenario: Publish and unpublish a volume to host with deleted filesystem
-    Given a CSI service
-    And a basic block volume request name "gdtest-vol42" protocol "NFS" size "5"
-    When I call CreateVolume
-    And there are no errors
-    And when I call DeleteVolume
-    Then there are no errors
-    And when I call PublishVolume
-    Then the error message should contain "failed"
-    And when I call UnpublishVolume
-    Then there are no errors
-
   Scenario: Publish and unpublish volume idempotency
     Given a CSI service
     And a basic block volume request name "gdtest-vol22" protocol "FC" size "5"
