@@ -126,6 +126,8 @@ type service struct {
 	iscsiClient    goiscsi.ISCSIinterface
 	fcConnector    fcConnector //gobrick connectors
 	iscsiConnector iSCSIConnector
+
+	replicationPrefix        string
 }
 
 type iSCSIConnector interface {

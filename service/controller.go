@@ -39,6 +39,15 @@ const (
 	keyHostIoSize           = "hostIoSize"
 )
 
+const (
+	// KeyReplicationEnabled represents key for replication enabled
+	KeyReplicationEnabled = "isReplicationEnabled"
+	KeyReplicationCGPrefix = "consistencyGroupPrefix"
+	KeyReplicationRPO = "rpo"
+	RPO_MIN = uint(5)
+	RPO_MAX = uint(1440)
+)
+
 // Constants used across module
 const (
 	FC                       = "FC"
@@ -248,6 +257,37 @@ func (s *service) CreateVolume(ctx context.Context, req *csi.CreateVolumeRequest
 			log.Info("'Volume name' already exists and size is different")
 			return nil, status.Error(codes.AlreadyExists, utils.GetMessageWithRunID(rid, "'Volume name' already exists and size is different."))
 		}
+
+
+		////////////////////////////////////////
+		////////////////////////////////////////
+
+		// Check if replication is enabled
+		replicationEnabled := params[s.WithRP(KeyReplicationEnabled)]
+
+		//block volume replication section
+		if replicationEnabled == "true" {
+			log.Info("Preparing volume replication")
+
+			cgPrefix, ok := params[s.WithRP(KeyReplicationCGPrefix)]
+			if !ok {
+				return nil, status.Errorf(codes.InvalidArgument, "replication enabled but no CG prefix specified in storage class")
+			}
+			rpoStr, ok := params[s.WithRP(KeyReplicationRPO)]
+			if !ok {
+				return nil, status.Errorf(codes.InvalidArgument, "replication enabled but no RPO specified in storage class")
+			}
+			rpo , err := strconv.ParseUint(rpoStr, 10, 32)
+			if (err != nil || uint(rpo) < RPO_MIN || uint(rpo) > RPO_MAX)  {
+				return nil, status.Errorf(codes.InvalidArgument, "invalid rpo value")
+			}
+
+			log.Info("cgPrefix",cgPrefix)
+			log.Info("rpo",rpo)
+		}
+		////////////////////////////////////////
+		////////////////////////////////////////
+
 
 		log.Debug("Volume does not exist, proceeding to create new volume")
 		resp, err := volumeAPI.CreateLun(ctx, volName, storagePool, desc, uint64(size), int(tieringPolicy), hostIOLimitID, thin, dataReduction)
