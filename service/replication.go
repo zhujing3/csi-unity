@@ -2,10 +2,13 @@ package service
 
 import (
 	"context"
+	"strconv"
 	"strings"
 
 	csiext "github.com/dell/dell-csi-extensions/replication"
 	"github.com/dell/gounity"
+	"github.com/dell/gounity/types"
+	"github.com/prometheus/common/log"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -175,7 +178,206 @@ func (s *service) DeleteStorageProtectionGroup(ctx context.Context, req *csiext.
 }
 
 func (s *service) ExecuteAction(ctx context.Context, req *csiext.ExecuteActionRequest) (*csiext.ExecuteActionResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "Not implemented")
+	ctx, log, reqID := GetRunidLog(ctx)
+	localParams := req.GetProtectionGroupAttributes()
+	groupID := req.GetProtectionGroupId()
+	splitedGroupID := strings.Split(strings.Split(groupID, "=_=")[0], "_")
+	rpoStr := splitedGroupID[len(splitedGroupID)-1]
+	rpo, err := strconv.ParseUint(rpoStr, 10, 32)
+	if err != nil || uint(rpo) < uint(0) || uint(rpo) > uint(1440) {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid rpo value")
+	}
+
+	arrayID, ok := localParams[s.opts.replicationContextPrefix+"systemName"]
+	action := req.GetAction().GetActionTypes().String()
+	if !ok {
+		log.Error("Can't get systemName from PG params")
+	}
+	remoteArrayID, ok := localParams[s.opts.replicationContextPrefix+"remoteSystemName"]
+	if !ok {
+		log.Error("Can't get systemName from PG params")
+	}
+
+	if err := s.requireProbe(ctx, arrayID); err != nil {
+		return nil, err
+	}
+	localUnity, err := getUnityClient(ctx, s, arrayID)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := s.requireProbe(ctx, remoteArrayID); err != nil {
+		return nil, err
+	}
+	remoteUnity, err := getUnityClient(ctx, s, remoteArrayID)
+	if err != nil {
+		return nil, err
+	}
+
+	fields := map[string]interface{}{
+		"RequestID": reqID,
+		"ArrayID": localParams[s.opts.replicationContextPrefix+"systemName"],
+		"ProtectedStorageGroup": groupID,
+		"Action": action,
+	}
+	log.WithFields(fields).Info("Executing ExecuteAction with following fields")
+	fsAPI := gounity.NewFilesystem(localUnity)
+	prefix := strings.ReplaceAll(groupID, strings.ToUpper(arrayID), strings.ToUpper(remoteArrayID))
+	fsGroup, err := fsAPI.FindFileSystemGroupByPrefixWithFields(ctx, prefix)
+	if err != nil {
+		return nil, err
+	}
+	if len(fsGroup) == 0 {
+		return nil, status.Error(codes.NotFound, "Filesystem group not found")
+	}
+	localNasServer := fsGroup[0].FileContent.NASServer
+
+	replAPI := gounity.NewReplicationSession(localUnity)
+	rs, err := replAPI.FindReplicationSessionBySrcResourceID(ctx, localNasServer.ID)
+	if err != nil {
+		return nil, err
+	}
+	var execAction gounity.ActionType
+	var failOverParams *types.FailOverParams = nil
+	switch action {
+	case csiext.ActionTypes_FAILOVER_REMOTE.String():
+		execAction = gounity.RS_ACTION_FAILOVER
+		if rpo == 0 {
+			failOverParams = &types.FailOverParams{Sync: false}
+			resErr := FailoverAction(rs, remoteUnity, execAction, *failOverParams)
+			if resErr != nil {
+				return nil, resErr
+			}
+		} else {
+			failOverParams = &types.FailOverParams{Sync: true}
+			resErr := FailoverAction(rs, localUnity, execAction, *failOverParams)
+			if resErr != nil {
+				return nil, resErr
+			}
+		}
+	case csiext.ActionTypes_UNPLANNED_FAILOVER_LOCAL.String():
+		execAction = gounity.RS_ACTION_FAILOVER
+		failOverParams = &types.FailOverParams{Sync: false}
+		resErr := FailoverAction(rs, remoteUnity, execAction, *failOverParams)
+		if resErr != nil {
+			return nil, resErr
+		}
+	case csiext.ActionTypes_SUSPEND.String():
+		execAction = gounity.RS_ACTION_PAUSE
+		resErr := ExecuteAction(rs, localUnity, execAction)
+		if resErr != nil {
+			return nil, resErr
+		}
+	case csiext.ActionTypes_RESUME.String():
+		execAction = gounity.RS_ACTION_RESUME
+		resErr := ExecuteAction(rs, localUnity, execAction)
+		if resErr != nil {
+			return nil, resErr
+		}
+	case csiext.ActionTypes_SYNC.String():
+		execAction = gounity.RS_ACTION_SYNC
+		resErr := ExecuteAction(rs, localUnity, execAction)
+		if resErr != nil {
+			return nil, resErr
+		}
+	case csiext.ActionTypes_REPROTECT_LOCAL.String():
+		execAction = gounity.RS_ACTION_REPROTECT
+		resErr := ExecuteAction(rs, remoteUnity, gounity.RS_ACTION_RESUME)
+		if resErr != nil {
+			return nil, resErr
+		}
+	default:
+		return nil, status.Errorf(codes.Unknown, "The requested action does not match with supported actions")
+	}
+
+	//@ TODO uncomment when GetSPGStatus will be done
+	//statusResp, err := s.GetStorageProtectionGroupStatus(ctx, &csiext.GetStorageProtectionGroupStatusRequest{
+	//	ProtectionGroupId: groupID,
+	//	ProtectionGroupAttributes: localParams,
+	//})
+	//if err != nil {
+	//	return nil, status.Errorf(codes.Internal, "can't get storage protection group status: %s", err.Error())
+	//}
+	
+	resp := csiext.ExecuteActionResponse{
+		Success: true,
+		ActionTypes: &csiext.ExecuteActionResponse_Action{
+			Action: req.GetAction(),
+		},
+		//@ TODO uncomment when GetSPGStatus will be done
+		//Status: statusResp.Status,
+	}
+	return &resp, nil
+}
+
+func FailoverAction(session *types.ReplicationSession, unityClient *gounity.Client, action gounity.ActionType, failoverParams types.FailOverParams) error {
+	inDesiredState, actionRequired, err := validateRSState(session, action)
+	if err != nil {
+		return nil
+	}
+
+	if !inDesiredState {
+		if !actionRequired {
+			return status.Errorf(codes.Aborted, "FailOver action: RS (%s) is still executing previous action", session.ReplicationSessionContent.ReplicationSessionId)
+		}
+		 replApi := gounity.NewReplicationSession(unityClient)
+		 err := replApi.FailoverActionOnRelicationSessiion(context.Background(), session.ReplicationSessionContent.ReplicationSessionId, action, failoverParams)
+		 if err != nil {
+			return err
+		 }
+		 log.Debugf("Action (%s) successful on RS(%s)", string(action), session.ReplicationSessionContent.ReplicationSessionId)
+	}
+
+	return nil
+}
+
+func ExecuteAction(session *types.ReplicationSession, unityClient *gounity.Client, action gounity.ActionType) error {
+	inDesiredState, actionRequired, err := validateRSState(session, action)
+	if err != nil {
+		return nil
+	}
+
+	if !inDesiredState {
+		if !actionRequired {
+			return status.Errorf(codes.Aborted, "Execute action: RS (%s) is still executing previous action", session.ReplicationSessionContent.ReplicationSessionId)
+		}
+		replApi := gounity.NewReplicationSession(unityClient)
+		err := replApi.ExecuteActionOnReplicationSession(context.Background(), session.ReplicationSessionContent.ReplicationSessionId, action)
+		if err != nil {
+			return err
+		}
+		log.Debugf("Action (%s) successful on RS(%s)", string(action), session.ReplicationSessionContent.ReplicationSessionId)
+	}
+
+	return nil
+}
+
+func validateRSState(session *types.ReplicationSession, action gounity.ActionType) (inDesiredState, actionRequires bool, resErr error) {
+	state := session.ReplicationSessionContent.Status
+	log.Infof("Replication session is in %s", state)
+	switch action {
+	case gounity.RS_ACTION_RESUME:
+		if state == 33805 || state == 2 {
+			log.Infof("RS (%s) is already in desired state: (%s)", session.ReplicationSessionContent.ReplicationSessionId, state)
+			return true, false, nil
+		}
+	case gounity.RS_ACTION_REPROTECT:
+		if state == 33805 || state == 2 {
+			log.Infof("RS (%s) is already in desired state: (%s)", session.ReplicationSessionContent.ReplicationSessionId, state)
+			return true, false, nil
+		}
+	case gounity.RS_ACTION_PAUSE:
+		if state == 33795 || state == 34795 {
+			log.Infof("RS (%s) is already in desired state: (%s)", session.ReplicationSessionContent.ReplicationSessionId, state)
+			return true, false, nil
+		}
+	case gounity.RS_ACTION_FAILOVER:
+		if state == 33792 || state == 33793 || state == 34792 || state == 34793 {
+			log.Infof("RS (%s) is already in desired state: (%s)", session.ReplicationSessionContent.ReplicationSessionId, state)
+			return true, false, nil
+		}
+	}
+	return false, true, nil	
 }
 
 func (s *service) GetStorageProtectionGroupStatus(ctx context.Context, req *csiext.GetStorageProtectionGroupStatusRequest) (*csiext.GetStorageProtectionGroupStatusResponse, error) {
