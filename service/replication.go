@@ -309,7 +309,7 @@ func (s *service) ExecuteAction(ctx context.Context, req *csiext.ExecuteActionRe
 		} else if rs.ReplicationSessionContent.LocalRole == 1 {
 			resErr := ExecuteAction(rs, localUnity, gounity.RS_ACTION_RESUME)
 			if resErr != nil {
-				return nil, resErr
+				return nil, err
 			}
 			accessTypes := []gounity.AccessType{gounity.ReadOnlyAccessType, gounity.ReadWriteAccessType, gounity.ReadOnlyRootAccessType, gounity.ReadWriteRootAccessType}
 			srcFs := fsGroup[0]
@@ -318,7 +318,7 @@ func (s *service) ExecuteAction(ctx context.Context, req *csiext.ExecuteActionRe
 				for _, accType := range accessTypes {
 					err = fsAPI.ModifyNFSShareHostAccess(ctx, srcFs.FileContent.ID, nfsShare.ID, []string{}, accType)
 					if err != nil {
-						return nil, status.Errorf(codes.Internal, "Replications direction is not changed yet", err.Error())
+						return nil, err
 					}
 				}
 			}
