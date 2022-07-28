@@ -5,8 +5,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/dell/gounity/types"
-
 	csiext "github.com/dell/dell-csi-extensions/replication"
 	"github.com/dell/gounity"
 	"github.com/dell/gounity/types"
@@ -31,7 +29,6 @@ func (s *service) CreateRemoteVolume(ctx context.Context, req *csiext.CreateRemo
 	if err := s.requireProbe(ctx, arrayID); err != nil {
 		return nil, err
 	}
-	//remoteVolumeResp := &csiext.CreateRemoteVolumeResponse{}
 	if protocol == NFS {
 		fsAPI := gounity.NewFilesystem(unity)
 		fileSystems, err := fsAPI.FindFilesystemByID(ctx, volID)
@@ -182,13 +179,16 @@ func (s *service) ExecuteAction(ctx context.Context, req *csiext.ExecuteActionRe
 	ctx, log, reqID := GetRunidLog(ctx)
 	localParams := req.GetProtectionGroupAttributes()
 	groupID := req.GetProtectionGroupId()
-	splitedGroupID := strings.Split(strings.Split(groupID, "=_=")[0], "_")
+	protocol := localParams[s.opts.replicationContextPrefix+"protocol"]
+	splitedGroupID := strings.Split(strings.Split(groupID, "::")[0], "_")
 	rpoStr := splitedGroupID[len(splitedGroupID)-1]
 	rpo, err := strconv.ParseUint(rpoStr, 10, 32)
 	if err != nil || uint(rpo) < uint(0) || uint(rpo) > uint(1440) {
 		return nil, status.Errorf(codes.InvalidArgument, "invalid rpo value")
 	}
-
+	if protocol != NFS {
+		return nil, status.Error(codes.Unimplemented, "Block replication is not implemented")
+	}
 	arrayID, ok := localParams[s.opts.replicationContextPrefix+"systemName"]
 	action := req.GetAction().GetActionTypes().String()
 	if !ok {
@@ -216,15 +216,21 @@ func (s *service) ExecuteAction(ctx context.Context, req *csiext.ExecuteActionRe
 	}
 
 	fields := map[string]interface{}{
-		"RequestID": reqID,
-		"ArrayID": localParams[s.opts.replicationContextPrefix+"systemName"],
+		"RequestID":             reqID,
+		"ArrayID":               localParams[s.opts.replicationContextPrefix+"systemName"],
 		"ProtectedStorageGroup": groupID,
-		"Action": action,
+		"Action":                action,
 	}
 	log.WithFields(fields).Info("Executing ExecuteAction with following fields")
 	fsAPI := gounity.NewFilesystem(localUnity)
-	prefix := strings.ReplaceAll(groupID, strings.ToUpper(arrayID), strings.ToUpper(remoteArrayID))
-	fsGroup, err := fsAPI.FindFileSystemGroupByPrefixWithFields(ctx, prefix)
+	prefix := strings.Split(groupID, "::")
+	if len(prefix) == 0 {
+		return nil, status.Error(codes.InvalidArgument, "Wrong groupID format")
+	}
+	vgName := prefix[0]
+	fsGroup, err := fsAPI.FindFileSystemGroupByPrefixWithFields(ctx, vgName)
+	remoteFsAPI := gounity.NewFilesystem(remoteUnity)
+	remoteFs, err := remoteFsAPI.FindFileSystemGroupByPrefixWithFields(ctx, vgName)
 	if err != nil {
 		return nil, err
 	}
@@ -283,30 +289,58 @@ func (s *service) ExecuteAction(ctx context.Context, req *csiext.ExecuteActionRe
 		}
 	case csiext.ActionTypes_REPROTECT_LOCAL.String():
 		execAction = gounity.RS_ACTION_REPROTECT
-		resErr := ExecuteAction(rs, remoteUnity, gounity.RS_ACTION_RESUME)
-		if resErr != nil {
-			return nil, resErr
+		if rs.ReplicationSessionContent.LocalRole == 0 {
+			resErr := ExecuteAction(rs, remoteUnity, gounity.RS_ACTION_RESUME)
+			if resErr != nil {
+				return nil, resErr
+			}
+			accessTypes := []gounity.AccessType{gounity.ReadOnlyAccessType, gounity.ReadWriteAccessType, gounity.ReadOnlyRootAccessType, gounity.ReadWriteRootAccessType}
+			dstFs := remoteFs[0]
+			listNFSShares := dstFs.FileContent.NFSShare
+
+			for _, nfsShare := range listNFSShares {
+				for _, accType := range accessTypes {
+					err = remoteFsAPI.ModifyNFSShareHostAccess(ctx, dstFs.FileContent.ID, nfsShare.ID, []string{}, accType)
+					if err != nil {
+						return nil, status.Errorf(codes.Internal, "Replications direction is not changed yet", err.Error())
+					}
+				}
+			}
+		} else if rs.ReplicationSessionContent.LocalRole == 1 {
+			resErr := ExecuteAction(rs, localUnity, gounity.RS_ACTION_RESUME)
+			if resErr != nil {
+				return nil, resErr
+			}
+			accessTypes := []gounity.AccessType{gounity.ReadOnlyAccessType, gounity.ReadWriteAccessType, gounity.ReadOnlyRootAccessType, gounity.ReadWriteRootAccessType}
+			srcFs := fsGroup[0]
+			listNFSShares := srcFs.FileContent.NFSShare
+			for _, nfsShare := range listNFSShares {
+				for _, accType := range accessTypes {
+					err = fsAPI.ModifyNFSShareHostAccess(ctx, srcFs.FileContent.ID, nfsShare.ID, []string{}, accType)
+					if err != nil {
+						return nil, status.Errorf(codes.Internal, "Replications direction is not changed yet", err.Error())
+					}
+				}
+			}
 		}
 	default:
 		return nil, status.Errorf(codes.Unknown, "The requested action does not match with supported actions")
 	}
 
-	//@ TODO uncomment when GetSPGStatus will be done
-	//statusResp, err := s.GetStorageProtectionGroupStatus(ctx, &csiext.GetStorageProtectionGroupStatusRequest{
-	//	ProtectionGroupId: groupID,
-	//	ProtectionGroupAttributes: localParams,
-	//})
-	//if err != nil {
-	//	return nil, status.Errorf(codes.Internal, "can't get storage protection group status: %s", err.Error())
-	//}
-	
+	statusResp, err := s.GetStorageProtectionGroupStatus(ctx, &csiext.GetStorageProtectionGroupStatusRequest{
+		ProtectionGroupId:         groupID,
+		ProtectionGroupAttributes: localParams,
+	})
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "can't get storage protection group status: %s", err.Error())
+	}
+
 	resp := csiext.ExecuteActionResponse{
 		Success: true,
 		ActionTypes: &csiext.ExecuteActionResponse_Action{
 			Action: req.GetAction(),
 		},
-		//@ TODO uncomment when GetSPGStatus will be done
-		//Status: statusResp.Status,
+		Status: statusResp.Status,
 	}
 	return &resp, nil
 }
@@ -319,14 +353,14 @@ func FailoverAction(session *types.ReplicationSession, unityClient *gounity.Clie
 
 	if !inDesiredState {
 		if !actionRequired {
-			return status.Errorf(codes.Aborted, "FailOver action: RS (%s) is still executing previous action", session.ReplicationSessionContent.ReplicationSessionId)
+			return status.Errorf(codes.Aborted, "FailOver action: RS (%s) is still executing previous action", session.ReplicationSessionContent.ReplicationSessionID)
 		}
-		 replApi := gounity.NewReplicationSession(unityClient)
-		 err := replApi.FailoverActionOnRelicationSessiion(context.Background(), session.ReplicationSessionContent.ReplicationSessionId, action, failoverParams)
-		 if err != nil {
-			return err
-		 }
-		 log.Debugf("Action (%s) successful on RS(%s)", string(action), session.ReplicationSessionContent.ReplicationSessionId)
+		replApi := gounity.NewReplicationSession(unityClient)
+		err := replApi.FailoverActionOnRelicationSession(context.Background(), session.ReplicationSessionContent.ReplicationSessionID, action, failoverParams)
+		if err != nil {
+			return status.Errorf(codes.Internal, "can't execute failover action", err.Error())
+		}
+		log.Debugf("Action (%s) successful on RS(%s)", string(action), session.ReplicationSessionContent.ReplicationSessionID)
 	}
 
 	return nil
@@ -340,14 +374,14 @@ func ExecuteAction(session *types.ReplicationSession, unityClient *gounity.Clien
 
 	if !inDesiredState {
 		if !actionRequired {
-			return status.Errorf(codes.Aborted, "Execute action: RS (%s) is still executing previous action", session.ReplicationSessionContent.ReplicationSessionId)
+			return status.Errorf(codes.Aborted, "Execute action: RS (%s) is still executing previous action", session.ReplicationSessionContent.ReplicationSessionID)
 		}
 		replApi := gounity.NewReplicationSession(unityClient)
-		err := replApi.ExecuteActionOnReplicationSession(context.Background(), session.ReplicationSessionContent.ReplicationSessionId, action)
+		err := replApi.ExecuteActionOnReplicationSession(context.Background(), session.ReplicationSessionContent.ReplicationSessionID, action)
 		if err != nil {
-			return err
+			return status.Errorf(codes.Internal, "can't execute action %s", action, err.Error())
 		}
-		log.Debugf("Action (%s) successful on RS(%s)", string(action), session.ReplicationSessionContent.ReplicationSessionId)
+		log.Debugf("Action (%s) successful on RS(%s)", string(action), session.ReplicationSessionContent.ReplicationSessionID)
 	}
 
 	return nil
@@ -358,27 +392,27 @@ func validateRSState(session *types.ReplicationSession, action gounity.ActionTyp
 	log.Infof("Replication session is in %s", state)
 	switch action {
 	case gounity.RS_ACTION_RESUME:
-		if state == 33805 || state == 2 {
-			log.Infof("RS (%s) is already in desired state: (%s)", session.ReplicationSessionContent.ReplicationSessionId, state)
+		if state == types.RS_STATUS_ACTIVE || state == types.RS_STATUS_OK || state == types.RS_STATUS_AUTO_SYNC_CONFIGURED || state == types.RS_STATUS_AUTO_SYNC_CONFIGURED_MIXED {
+			log.Infof("RS (%s) is already in desired state: (%s)", session.ReplicationSessionContent.ReplicationSessionID, state)
 			return true, false, nil
 		}
 	case gounity.RS_ACTION_REPROTECT:
-		if state == 33805 || state == 2 {
-			log.Infof("RS (%s) is already in desired state: (%s)", session.ReplicationSessionContent.ReplicationSessionId, state)
+		if state == types.RS_STATUS_ACTIVE || state == types.RS_STATUS_OK || state == types.RS_STATUS_AUTO_SYNC_CONFIGURED || state == types.RS_STATUS_AUTO_SYNC_CONFIGURED_MIXED {
+			log.Infof("RS (%s) is already in desired state: (%s)", session.ReplicationSessionContent.ReplicationSessionID, state)
 			return true, false, nil
 		}
 	case gounity.RS_ACTION_PAUSE:
-		if state == 33795 || state == 34795 {
-			log.Infof("RS (%s) is already in desired state: (%s)", session.ReplicationSessionContent.ReplicationSessionId, state)
+		if state == types.RS_STATUS_PAUSED || state == types.RS_STATUS_PAUSED_MIXED {
+			log.Infof("RS (%s) is already in desired state: (%s)", session.ReplicationSessionContent.ReplicationSessionID, state)
 			return true, false, nil
 		}
 	case gounity.RS_ACTION_FAILOVER:
-		if state == 33792 || state == 33793 || state == 34792 || state == 34793 {
-			log.Infof("RS (%s) is already in desired state: (%s)", session.ReplicationSessionContent.ReplicationSessionId, state)
+		if state == types.RS_STATUS_FAILED_OVER_WITH_SYNC || state == types.RS_STATUS_FAILED_OVER_MIXED || state == types.RS_STATUS_FAILED_OVER_WITH_SYNC_MIXED || state == types.RS_STATUS_FAILED_OVER_MIXED {
+			log.Infof("RS (%s) is already in desired state: (%s)", session.ReplicationSessionContent.ReplicationSessionID, state)
 			return true, false, nil
 		}
 	}
-	return false, true, nil	
+	return false, true, nil
 }
 
 func (s *service) GetStorageProtectionGroupStatus(ctx context.Context, req *csiext.GetStorageProtectionGroupStatusRequest) (*csiext.GetStorageProtectionGroupStatusResponse, error) {
@@ -449,7 +483,7 @@ func (s *service) GetStorageProtectionGroupStatus(ctx context.Context, req *csie
 
 			var monitoringState csiext.StorageProtectionGroupStatus_State
 			switch rsStatus {
-			case types.RS_STATUS_ACTIVE, types.RS_STATUS_OK:
+			case types.RS_STATUS_ACTIVE, types.RS_STATUS_OK, types.RS_STATUS_AUTO_SYNC_CONFIGURED, types.RS_STATUS_AUTO_SYNC_CONFIGURED_MIXED:
 				monitoringState = csiext.StorageProtectionGroupStatus_SYNCHRONIZED
 				break
 			case types.RS_STATUS_SYNCING, types.RS_STATUS_MANUAL_SYNCING, types.RS_STATUS_MANUAL_SYNCING_MIXED:
