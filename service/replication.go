@@ -37,6 +37,9 @@ func (s *service) CreateRemoteVolume(ctx context.Context, req *csiext.CreateRemo
 		}
 		replAPI := gounity.NewReplicationSession(unity)
 		rs, err := replAPI.FindReplicationSessionBySrcResourceID(ctx, fileSystems.FileContent.StorageResource.ID)
+		if rs == nil {
+			return nil, status.Error(codes.NotFound, "Replication session not found")
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -106,6 +109,9 @@ func (s *service) CreateStorageProtectionGroup(ctx context.Context, req *csiext.
 		}
 		replAPI := gounity.NewReplicationSession(unity)
 		rs, err := replAPI.FindReplicationSessionBySrcResourceID(ctx, fileSystems.FileContent.StorageResource.ID)
+		if rs == nil {
+			return nil, status.Error(codes.NotFound, "Replication session not found")
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -241,6 +247,9 @@ func (s *service) ExecuteAction(ctx context.Context, req *csiext.ExecuteActionRe
 
 	replAPI := gounity.NewReplicationSession(localUnity)
 	rs, err := replAPI.FindReplicationSessionBySrcResourceID(ctx, localNasServer.ID)
+	if rs == nil {
+		return nil, status.Error(codes.NotFound, "Replication session not found")
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -466,6 +475,9 @@ func (s *service) GetStorageProtectionGroupStatus(ctx context.Context, req *csie
 					continue
 				}
 				replSession, err = replAPI.FindReplicationSessionBySrcResourceID(ctx, fs.FileContent.StorageResource.ID)
+				if replSession == nil {
+					return nil, status.Error(codes.NotFound, "Replication session not found")
+				}
 				if err != nil {
 					return nil, err
 				}
