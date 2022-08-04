@@ -253,6 +253,14 @@ func (s *service) ExecuteAction(ctx context.Context, req *csiext.ExecuteActionRe
 	if err != nil {
 		return nil, err
 	}
+	remoteReplAPI := gounity.NewReplicationSession(remoteUnity)
+
+	if rs == nil {
+		return nil, status.Error(codes.NotFound, "Replication session not found")
+	}
+	if err != nil {
+		return nil, err
+	}
 	var execAction gounity.ActionType
 	var failOverParams *types.FailOverParams = nil
 	switch action {
@@ -299,35 +307,64 @@ func (s *service) ExecuteAction(ctx context.Context, req *csiext.ExecuteActionRe
 	case csiext.ActionTypes_REPROTECT_LOCAL.String():
 		execAction = gounity.RS_ACTION_REPROTECT
 		if rs.ReplicationSessionContent.LocalRole == 0 {
+
+			var listOflistsNFSShares [][]types.Share
+			for _, dstFs := range fsGroup {
+				listOflistsNFSShares = append(listOflistsNFSShares, dstFs.FileContent.NFSShare)
+			}
+
 			resErr := ExecuteAction(rs, remoteUnity, gounity.RS_ACTION_RESUME)
 			if resErr != nil {
 				return nil, resErr
 			}
 			accessTypes := []gounity.AccessType{gounity.ReadOnlyAccessType, gounity.ReadWriteAccessType, gounity.ReadOnlyRootAccessType, gounity.ReadWriteRootAccessType}
-			dstFs := remoteFs[0]
-			listNFSShares := dstFs.FileContent.NFSShare
+			state := 0
+			for state == 0 {
+				localRs, err := replAPI.FindReplicationSessionByID(ctx, rs.ReplicationSessionContent.ReplicationSessionID)
+				if err != nil {
+					return nil, err
+				}
+				state = localRs.ReplicationSessionContent.LocalRole
+			}
 
-			for _, nfsShare := range listNFSShares {
+			for i, nfsShare := range listOflistsNFSShares {
 				for _, accType := range accessTypes {
-					err = remoteFsAPI.ModifyNFSShareHostAccess(ctx, dstFs.FileContent.ID, nfsShare.ID, []string{}, accType)
+					err = remoteFsAPI.ModifyNFSShareHostAccess(ctx, remoteFs[i].FileContent.ID, nfsShare[0].ID, []string{}, accType)
 					if err != nil {
 						return nil, status.Errorf(codes.Internal, "Replications direction is not changed yet", err.Error())
+
 					}
 				}
 			}
 		} else if rs.ReplicationSessionContent.LocalRole == 1 {
+
+			var listOflistsNFSShares [][]types.Share
+			for _, srcFs := range fsGroup {
+				listOflistsNFSShares = append(listOflistsNFSShares, srcFs.FileContent.NFSShare)
+			}
+
 			resErr := ExecuteAction(rs, localUnity, gounity.RS_ACTION_RESUME)
 			if resErr != nil {
 				return nil, err
 			}
 			accessTypes := []gounity.AccessType{gounity.ReadOnlyAccessType, gounity.ReadWriteAccessType, gounity.ReadOnlyRootAccessType, gounity.ReadWriteRootAccessType}
-			srcFs := fsGroup[0]
-			listNFSShares := srcFs.FileContent.NFSShare
-			for _, nfsShare := range listNFSShares {
+
+			state := 0
+			for state == 0 {
+				remoteRs, err := remoteReplAPI.FindReplicationSessionByID(ctx, rs.ReplicationSessionContent.ReplicationSessionID)
+				if err != nil {
+					return nil, err
+				}
+				state = remoteRs.ReplicationSessionContent.LocalRole
+			}
+
+			for i, nfsShare := range listOflistsNFSShares {
 				for _, accType := range accessTypes {
-					err = fsAPI.ModifyNFSShareHostAccess(ctx, srcFs.FileContent.ID, nfsShare.ID, []string{}, accType)
+					err = fsAPI.ModifyNFSShareHostAccess(ctx, fsGroup[i].FileContent.ID, nfsShare[0].ID, []string{}, accType)
+
 					if err != nil {
-						return nil, err
+
+						return nil, status.Errorf(codes.Internal, "Replications direction is not changed yet", err.Error())
 					}
 				}
 			}

@@ -396,7 +396,10 @@ func (s *service) DeleteVolume(
 	} else {
 		log.Info("Protocol NFS,check if volume is replicated")
 		fileAPI := gounity.NewFilesystem(unity)
-		filesystem, _ := fileAPI.FindFilesystemByID(ctx, volID)
+		filesystem, err := fileAPI.FindFilesystemByID(ctx, volID)
+		if err != nil {
+			return nil, err
+		}
 		replAPI := gounity.NewReplicationSession(unity)
 		session, _ := replAPI.FindReplicationSessionBySrcResourceID(ctx, filesystem.FileContent.StorageResource.ID)
 		log.Debugf("Replication session: %v", session)
