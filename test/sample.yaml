@@ -15,6 +15,7 @@
 # > kubectl delete -f ./tests/simple/
 #
 
+
 apiVersion: v1
 kind: Namespace
 metadata:
