@@ -1,0 +1,114 @@
+/root/csi-unity/dell-csi-helm-installer/../helm/csi-unity/Chart.yaml
+unity
+---------------
+csi-install.sh:183 - Running command: kubectl get crd
+Results:
+NAME                                             CREATED AT
+volumesnapshotclasses.snapshot.storage.k8s.io    2022-11-24T12:50:06Z
+volumesnapshotcontents.snapshot.storage.k8s.io   2022-11-24T12:50:06Z
+volumesnapshots.snapshot.storage.k8s.io          2022-11-24T12:50:07Z
+---------------
+---------------
+csi-install.sh:398 - Running command: kubectl version -o=yaml
+Results:
+clientVersion:
+  buildDate: "2022-08-23T17:44:59Z"
+  compiler: gc
+  gitCommit: a866cbe2e5bbaa01cfd5e969aa3e033f3282a8a2
+  gitTreeState: clean
+  gitVersion: v1.25.0
+  goVersion: go1.19
+  major: "1"
+  minor: "25"
+  platform: linux/amd64
+kustomizeVersion: v4.5.7
+serverVersion:
+  buildDate: "2022-08-23T17:38:15Z"
+  compiler: gc
+  gitCommit: a866cbe2e5bbaa01cfd5e969aa3e033f3282a8a2
+  gitTreeState: clean
+  gitVersion: v1.25.0
+  goVersion: go1.19
+  major: "1"
+  minor: "25"
+  platform: linux/amd64
+
+---------------
+---------------
+csi-install.sh:399 - Running command: kubectl version -o=yaml
+Results:
+clientVersion:
+  buildDate: "2022-08-23T17:44:59Z"
+  compiler: gc
+  gitCommit: a866cbe2e5bbaa01cfd5e969aa3e033f3282a8a2
+  gitTreeState: clean
+  gitVersion: v1.25.0
+  goVersion: go1.19
+  major: "1"
+  minor: "25"
+  platform: linux/amd64
+kustomizeVersion: v4.5.7
+serverVersion:
+  buildDate: "2022-08-23T17:38:15Z"
+  compiler: gc
+  gitCommit: a866cbe2e5bbaa01cfd5e969aa3e033f3282a8a2
+  gitTreeState: clean
+  gitVersion: v1.25.0
+  goVersion: go1.19
+  major: "1"
+  minor: "25"
+  platform: linux/amd64
+
+---------------
+------------------------------------------------------
+Installing CSI Driver: csi-unity on 1.25
+------------------------------------------------------
+------------------------------------------------------
+Checking to see if CSI Driver is already installed
+------------------------------------------------------
+---------------
+csi-install.sh:86 - Running command: helm list --namespace unity
+Results:
+NAME	NAMESPACE	REVISION	UPDATED	STATUS	CHART	APP VERSION
+---------------
+Skipping verification at user request
+Installing Driver
+---------------
+csi-install.sh:148 - Running command: helm install --set openshift=false --values /root/csm-pipeline/csm-config/drivers/unity/values/sample.yaml --namespace unity unity /root/csi-unity/dell-csi-helm-installer/../helm/csi-unity
+Results:
+NAME: unity
+LAST DEPLOYED: Tue Nov 29 03:09:58 2022
+NAMESPACE: unity
+STATUS: deployed
+REVISION: 1
+TEST SUITE: None
+---------------
+---------------
+csi-install.sh:194 - Running command: kubectl -n unity get StatefulSet -o jsonpath={.items[*].metadata.name}
+Results:
+---------------
+---------------
+csi-install.sh:194 - Running command: kubectl -n unity get Deployment -o jsonpath={.items[*].metadata.name}
+Results:
+unity-controller---------------
+---------------
+csi-install.sh:194 - Running command: kubectl -n unity get DaemonSet -o jsonpath={.items[*].metadata.name}
+Results:
+unity-node---------------
+Waiting for Deployment unity-controller to be ready
+---------------
+csi-install.sh:235 - Running command: kubectl -n unity rollout status --timeout=300s Deployment unity-controller
+Results:
+Waiting for deployment "unity-controller" rollout to finish: 0 of 2 updated replicas are available...
+Waiting for deployment "unity-controller" rollout to finish: 1 of 2 updated replicas are available...
+deployment "unity-controller" successfully rolled out
+---------------
+Waiting for DaemonSet unity-node to be ready
+---------------
+csi-install.sh:235 - Running command: kubectl -n unity rollout status --timeout=300s DaemonSet unity-node
+Results:
+daemon set "unity-node" successfully rolled out
+---------------
+------------------------------------------------------
+Operation complete
+------------------------------------------------------

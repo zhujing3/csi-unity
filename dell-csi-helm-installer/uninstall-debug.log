@@ -1,0 +1,9 @@
+/root/csi-unity/dell-csi-helm-installer/../helm/csi-unity/Chart.yaml
+unity
+---------------
+csi-uninstall.sh:71 - Running command: helm list --namespace unity
+Results:
+---------------
+------------------------------------------------------
+Error: The CSI Driver is not installed.
+Uninstallation cannot continue
